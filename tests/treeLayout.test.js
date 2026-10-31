@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutTree, treeConnections, CARD_WIDTH, CARD_HEIGHT, normalizeMembers } from '../src/treeLayout.js';
+import { fitTreeView, layoutTree, treeConnections, CARD_WIDTH, CARD_HEIGHT, normalizeMembers } from '../src/treeLayout.js';
 
 function check(members) {
   const result = layoutTree(members);
@@ -23,6 +23,29 @@ function check(members) {
   assert.deepEqual(layoutTree(result), result);
   return result;
 }
+
+test('fit view centers and contains the full tree on desktop and mobile viewports', () => {
+  const members = [
+    { id: 'left', x: 0, y: 0 },
+    { id: 'right', x: 3200, y: 968 },
+  ];
+
+  for (const [width, height, topInset] of [[1380, 800, 64], [390, 844, 96]]) {
+    const { pan, zoom } = fitTreeView(members, width, height, topInset);
+    const left = pan.x;
+    const right = pan.x + (3200 + CARD_WIDTH) * zoom;
+    const top = pan.y + topInset;
+    const bottom = pan.y + (968 + CARD_HEIGHT) * zoom + topInset;
+
+    assert.ok(zoom > 0 && zoom <= 1);
+    assert.ok(left >= 0);
+    assert.ok(right <= width);
+    assert.ok(top >= topInset);
+    assert.ok(bottom <= height);
+    assert.ok(Math.abs((left + right) / 2 - width / 2) < 1);
+    assert.ok(Math.abs((top + bottom) / 2 - (topInset + height) / 2) < 1);
+  }
+});
 
 test('large families keep spouses adjacent and cards separate across generations', () => {
   const members = [{ id: 'a', spouseId: 'b' }, { id: 'b', spouseId: 'a' }];

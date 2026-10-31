@@ -1,15 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Plus, Moon, Sun, Download, Upload, Search, 
   User, X, Heart, Maximize, ZoomIn, ZoomOut, Wand2 
 } from 'lucide-react';
 
-import { CARD_HEIGHT, layoutTree, treeConnections } from './treeLayout';
+import { CARD_HEIGHT, fitTreeView, layoutTree, treeConnections } from './treeLayout';
 import initialMembers from '../tree/family_tree.json';
 
 export default function FamilyTreeApp() {
   // BYPASS CORRUPTED MEMORY BY USING A NEW STORAGE KEY: 'family_tree_v2'
   const [members, setMembers] = useState(initialMembers);
+  const membersRef = useRef(initialMembers);
 
   const [selectedId, setSelectedId] = useState(null);
   const selectedMember =
@@ -22,13 +23,34 @@ export default function FamilyTreeApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResultId, setSearchResultId] = useState(null);
   
-  const [pan, setPan] = useState({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [draggingNodeId, setDraggingNodeId] = useState(null);
   
   const canvasRef = useRef(null);
+  const pointerPositionsRef = useRef(new Map());
+  const pinchStartRef = useRef(null);
+
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
+  const fitTree = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const paddingTop = parseFloat(window.getComputedStyle(canvas).paddingTop) || 0;
+    const view = fitTreeView(membersRef.current, canvas.clientWidth, canvas.clientHeight, paddingTop);
+    setPan(view.pan);
+    setZoom(view.zoom);
+  }, []);
+
+  useEffect(() => {
+    fitTree();
+    window.addEventListener('resize', fitTree);
+    return () => window.removeEventListener('resize', fitTree);
+  }, [fitTree]);
 
   const findMatches = (query) => {
     const term = query.trim().toLowerCase();
@@ -41,7 +63,7 @@ export default function FamilyTreeApp() {
     if (!member || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const paddingTop = parseFloat(window.getComputedStyle(canvas).paddingTop) || 0;
-    const nextZoom = 1.25;
+    const nextZoom = Math.min(1.25, canvas.clientWidth / 300);
     setIsDrawerOpen(false);
     setSelectedId(member.id);
     setSearchResultId(member.id);
@@ -60,17 +82,54 @@ export default function FamilyTreeApp() {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const zoomAdjust = e.deltaY * -0.002;
-      setZoom((z) => Math.min(Math.max(0.2, z + zoomAdjust), 3));
+      setZoom((z) => Math.min(Math.max(0.05, z + zoomAdjust), 3));
     }
   };
 
   const handlePointerDown = (e) => {
     if (e.target.closest('.node-card')) return; 
-    setIsDraggingCanvas(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointerPositionsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointerPositionsRef.current.size === 2) {
+      const [first, second] = [...pointerPositionsRef.current.values()];
+      const rect = e.currentTarget.getBoundingClientRect();
+      const paddingTop = parseFloat(window.getComputedStyle(e.currentTarget).paddingTop) || 0;
+      const center = {
+        x: (first.x + second.x) / 2 - rect.left,
+        y: (first.y + second.y) / 2 - rect.top - paddingTop,
+      };
+      pinchStartRef.current = {
+        distance: Math.hypot(second.x - first.x, second.y - first.y),
+        zoom,
+        worldX: (center.x - pan.x) / zoom,
+        worldY: (center.y - pan.y) / zoom,
+      };
+      setIsDraggingCanvas(false);
+    } else {
+      setIsDraggingCanvas(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
   };
 
   const handlePointerMove = (e) => {
+    if (pointerPositionsRef.current.has(e.pointerId)) {
+      pointerPositionsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pointerPositionsRef.current.size >= 2 && pinchStartRef.current) {
+      const [first, second] = [...pointerPositionsRef.current.values()];
+      const rect = canvasRef.current.getBoundingClientRect();
+      const paddingTop = parseFloat(window.getComputedStyle(canvasRef.current).paddingTop) || 0;
+      const zoomNext = Math.min(3, Math.max(
+        0.05,
+        pinchStartRef.current.zoom * Math.hypot(second.x - first.x, second.y - first.y) / pinchStartRef.current.distance,
+      ));
+      setZoom(zoomNext);
+      setPan({
+        x: (first.x + second.x) / 2 - rect.left - pinchStartRef.current.worldX * zoomNext,
+        y: (first.y + second.y) / 2 - rect.top - paddingTop - pinchStartRef.current.worldY * zoomNext,
+      });
+      return;
+    }
     if (isDraggingCanvas) {
       setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
     }
@@ -81,8 +140,16 @@ export default function FamilyTreeApp() {
     }
   };
 
-  const handlePointerUp = () => {
-    setIsDraggingCanvas(false);
+  const handlePointerUp = (e) => {
+    pointerPositionsRef.current.delete(e.pointerId);
+    pinchStartRef.current = null;
+    if (pointerPositionsRef.current.size === 1) {
+      const remaining = [...pointerPositionsRef.current.values()][0];
+      setIsDraggingCanvas(true);
+      setDragStart({ x: remaining.x - pan.x, y: remaining.y - pan.y });
+    } else {
+      setIsDraggingCanvas(false);
+    }
     setDraggingNodeId(null);
   };
 
@@ -217,15 +284,15 @@ export default function FamilyTreeApp() {
   };
 
   return (
-    <div className={`h-screen w-screen overflow-hidden font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
+    <div className={`fixed inset-0 h-dvh w-screen overflow-hidden font-sans transition-colors duration-300 ${darkMode ? 'dark bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
       
-      <div className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 shadow-md ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-        <h1 className="text-xl font-bold text-blue-700 dark:text-blue-300">
+      <div className={`fixed top-0 left-0 right-0 z-50 flex flex-col gap-2 px-3 py-2 shadow-md sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-3 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+        <h1 className="whitespace-nowrap text-lg font-bold text-blue-700 dark:text-blue-300 sm:text-xl">
           Moktan Family Tree
         </h1>
         
-        <div className="flex items-center space-x-4">
-          <div className="relative">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:gap-4">
+          <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none md:w-64">
             <Search className="absolute left-3 top-2 text-gray-600 dark:text-gray-300" size={18} />
             <input 
               type="text" 
@@ -245,26 +312,26 @@ export default function FamilyTreeApp() {
               }}
               aria-label="Search relatives"
               aria-describedby="search-status"
-              className={`pl-10 pr-4 py-1.5 rounded-full text-sm outline-none border focus:ring-2 focus:ring-blue-500 ${darkMode ? 'bg-gray-700 border-slate-400' : 'bg-gray-100 border-slate-500'}`}
+              className={`w-full pl-10 pr-4 py-1.5 rounded-full text-sm outline-none border focus:ring-2 focus:ring-blue-500 ${darkMode ? 'bg-gray-700 border-slate-400' : 'bg-gray-100 border-slate-500'}`}
             />
             <span id="search-status" role="status" className={`absolute top-full left-0 mt-2 rounded-md px-3 py-1 text-xs whitespace-nowrap shadow ${searchQuery.trim() ? '' : 'sr-only'} ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-700'}`}>
               {searchQuery.trim() && (searchMatches.length ? `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'}${searchMatches.length > 1 ? ' · Enter for next' : ''}` : 'No matching relatives')}
             </span>
           </div>
 
-          <div className="flex items-center space-x-2 border-l pl-4 border-gray-300 dark:border-gray-600">
-            <button onClick={autoArrange} className="flex items-center p-2 rounded-full hover:bg-blue-50 text-blue-700 dark:text-blue-300 dark:hover:bg-gray-700 font-semibold" title="Auto-Organize Layout">
-              <Wand2 size={20} className="mr-1" />
+          <div className="flex shrink-0 items-center gap-0 border-l border-gray-300 pl-1 dark:border-gray-600 sm:gap-2 sm:pl-4">
+            <button onClick={autoArrange} className="flex size-10 items-center justify-center rounded-full text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-gray-700 sm:size-auto sm:p-2" title="Auto-Organize Layout" aria-label="Auto-organize layout">
+              <Wand2 size={20} />
             </button>
-            <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+            <button onClick={() => setDarkMode(!darkMode)} className="flex size-10 items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 sm:size-auto sm:p-2" title="Toggle color theme" aria-label="Toggle color theme">
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <button onClick={exportTree} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Backup Tree">
+            <button onClick={exportTree} className="flex size-10 items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 sm:size-auto sm:p-2" title="Backup Tree" aria-label="Backup tree">
               <Download size={20} />
             </button>
-            <label className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer" title="Load Tree">
+            <label className="flex size-10 cursor-pointer items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 sm:size-auto sm:p-2" title="Load Tree">
               <Upload size={20} />
-              <input type="file" accept=".json" onChange={importTree} className="hidden" />
+              <input type="file" accept=".json" onChange={importTree} className="sr-only" aria-label="Load tree backup" />
             </label>
           </div>
         </div>
@@ -272,7 +339,7 @@ export default function FamilyTreeApp() {
 
       <div 
         ref={canvasRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing absolute inset-0 pt-16"
+        className="absolute inset-0 h-full w-full touch-none cursor-grab pt-24 active:cursor-grabbing sm:pt-16"
         onWheel={handleWheel}
         onClick={(e) => {
           if (e.target.closest('.node-card')) return;
@@ -283,6 +350,7 @@ export default function FamilyTreeApp() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
       >
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }} className="w-full h-full relative">
           
@@ -326,13 +394,13 @@ export default function FamilyTreeApp() {
         </div>
       </div>
 
-      <div className={`fixed bottom-6 left-6 flex flex-col rounded-lg shadow-lg p-1 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-        <button onClick={() => setZoom(z => Math.min(z + 0.2, 3))} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"><ZoomIn size={20}/></button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.2))} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"><ZoomOut size={20}/></button>
-        <button onClick={() => { setZoom(1); setPan({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }); }} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"><Maximize size={20}/></button>
+      <div className={`fixed bottom-4 left-3 flex flex-col rounded-lg p-1 shadow-lg sm:bottom-6 sm:left-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+        <button onClick={() => setZoom(z => Math.min(z + 0.2, 3))} className="flex size-11 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Zoom in" aria-label="Zoom in"><ZoomIn size={20}/></button>
+        <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.05))} className="flex size-11 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Zoom out" aria-label="Zoom out"><ZoomOut size={20}/></button>
+        <button onClick={fitTree} className="flex size-11 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Fit tree to screen" aria-label="Fit tree to screen"><Maximize size={20}/></button>
       </div>
 
-      <div className={`fixed top-0 right-0 h-full w-96 shadow-2xl transition-transform duration-300 transform ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'} ${darkMode ? 'bg-gray-800 border-l border-gray-700' : 'bg-white'}`}>
+      <div className={`fixed top-0 right-0 h-dvh w-full max-w-96 shadow-2xl transition-transform duration-300 transform sm:w-96 ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'} ${darkMode ? 'bg-gray-800 border-l border-gray-700' : 'bg-white'}`}>
         {selectedMember && (
           <div className="h-full flex flex-col">
             <div className="flex justify-between items-center p-6 border-b dark:border-gray-700">

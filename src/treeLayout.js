@@ -3,6 +3,35 @@ export const CARD_HEIGHT = 164;
 const SPOUSE_GAP = 48;
 const FAMILY_GAP = 80;
 
+export function fitTreeView(members, viewportWidth, viewportHeight, topInset = 0) {
+  if (!members.length) {
+    return {
+      pan: { x: viewportWidth / 2, y: Math.max(0, viewportHeight - topInset) / 2 },
+      zoom: 1,
+    };
+  }
+
+  const bounds = members.reduce((result, member) => ({
+    minX: Math.min(result.minX, Number.isFinite(member.x) ? member.x : 0),
+    minY: Math.min(result.minY, Number.isFinite(member.y) ? member.y : 0),
+    maxX: Math.max(result.maxX, (Number.isFinite(member.x) ? member.x : 0) + CARD_WIDTH),
+    maxY: Math.max(result.maxY, (Number.isFinite(member.y) ? member.y : 0) + CARD_HEIGHT),
+  }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+  const treeWidth = bounds.maxX - bounds.minX;
+  const treeHeight = bounds.maxY - bounds.minY;
+  const availableWidth = Math.max(1, viewportWidth - 32);
+  const availableHeight = Math.max(1, viewportHeight - topInset - 32);
+  const zoom = Math.min(1, availableWidth / treeWidth, availableHeight / treeHeight);
+
+  return {
+    zoom,
+    pan: {
+      x: viewportWidth / 2 - (bounds.minX + treeWidth / 2) * zoom,
+      y: (viewportHeight - topInset) / 2 - (bounds.minY + treeHeight / 2) * zoom,
+    },
+  };
+}
+
 export function normalizeMembers(members) {
   const ids = new Set(members.map(m => m.id));
   const normalized = members.map(({ spouseId, spouseIds, ...member }) => ({
