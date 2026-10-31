@@ -4,7 +4,7 @@ import {
   User, X, Heart, Maximize, ZoomIn, ZoomOut, Wand2 
 } from 'lucide-react';
 
-import { CARD_HEIGHT, fitTreeView, layoutTree, treeConnections } from './treeLayout';
+import { CARD_HEIGHT, fitTreeView, getParentGenerationY, layoutTree, treeConnections } from './treeLayout';
 import initialMembers from '../tree/family_tree.json';
 
 export default function FamilyTreeApp() {
@@ -212,7 +212,8 @@ export default function FamilyTreeApp() {
 
     if (type === 'father' || type === 'mother') {
       const parentX = type === 'father' ? target.x - 130 : target.x + 130;
-      const pos = getFreePosition(parentX, target.y - 280, updatedMembers);
+      const parentY = getParentGenerationY(target, updatedMembers);
+      const pos = getFreePosition(parentX, parentY, updatedMembers);
       newMember.gender = type === 'father' ? 'male' : 'female';
       newMember.x = pos.x; newMember.y = pos.y;
       updatedMembers.push(newMember);
@@ -247,7 +248,7 @@ export default function FamilyTreeApp() {
       updatedMembers.push(newMember);
     }
 
-    setMembers(layoutTree(updatedMembers));
+    setMembers(type === 'father' || type === 'mother' ? updatedMembers : layoutTree(updatedMembers));
     setSelectedId(newId);
     setIsDrawerOpen(true);
   };

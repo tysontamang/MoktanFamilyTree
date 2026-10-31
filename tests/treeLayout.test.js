@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitTreeView, layoutTree, treeConnections, CARD_WIDTH, CARD_HEIGHT, normalizeMembers } from '../src/treeLayout.js';
+import { fitTreeView, getParentGenerationY, layoutTree, treeConnections, CARD_WIDTH, CARD_HEIGHT, normalizeMembers } from '../src/treeLayout.js';
 
 function check(members) {
   const result = layoutTree(members);
@@ -45,6 +45,18 @@ test('fit view centers and contains the full tree on desktop and mobile viewport
     assert.ok(Math.abs((left + right) / 2 - width / 2) < 1);
     assert.ok(Math.abs((top + bottom) / 2 - (topInset + height) / 2) < 1);
   }
+});
+
+test('new parents are positioned exactly one generation above their child', () => {
+  const target = { id: 'child', y: 968 };
+  const members = [
+    { id: 'grandparent', y: 0 },
+    { id: 'parent', y: 344 },
+    target,
+  ];
+
+  assert.equal(getParentGenerationY(target, members), 344);
+  assert.equal(getParentGenerationY({ id: 'root', y: 0 }, [{ id: 'root', y: 0 }]), -304);
 });
 
 test('large families keep spouses adjacent and cards separate across generations', () => {

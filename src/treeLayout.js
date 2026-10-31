@@ -2,6 +2,14 @@ export const CARD_WIDTH = 200;
 export const CARD_HEIGHT = 164;
 const SPOUSE_GAP = 48;
 const FAMILY_GAP = 80;
+const GENERATION_GAP = CARD_HEIGHT + 100 + 40;
+
+export function getParentGenerationY(target, members) {
+  const previousGenerationY = members.reduce((previousY, member) => (
+    member.y < target.y ? Math.max(previousY, member.y) : previousY
+  ), -Infinity);
+  return Number.isFinite(previousGenerationY) ? previousGenerationY : target.y - GENERATION_GAP;
+}
 
 export function fitTreeView(members, viewportWidth, viewportHeight, topInset = 0) {
   if (!members.length) {
