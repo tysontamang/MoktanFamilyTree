@@ -1,52 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { 
   Plus, Moon, Sun, Download, Upload, Search, 
   User, X, Heart, Maximize, ZoomIn, ZoomOut, Wand2 
 } from 'lucide-react';
 
 import { CARD_HEIGHT, layoutTree, treeConnections } from './treeLayout';
-
-// --- INITIAL STATE ---
-const initialMembers = [
-  {
-    id: "1",
-    fullName: "",
-    maidenName: "",
-    birthDate: "",
-    deathDate: "",
-    gender: "other",
-    avatarUrl: "",
-    bio: "Click on this card to edit my details and add relatives.",
-    fatherId: null,
-    motherId: null,
-    spouseIds: [],
-    x: 0,
-    y: 0
-  }
-];
+import initialMembers from '../tree/family_tree.json';
 
 export default function FamilyTreeApp() {
   // BYPASS CORRUPTED MEMORY BY USING A NEW STORAGE KEY: 'family_tree_v2'
   const [members, setMembers] = useState(initialMembers);
-
-useEffect(() => {
-  fetch(`${import.meta.env.BASE_URL}tree/family_tree.json`,{cache: "no-store",})
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error("Failed to load family tree");
-      }
-      return response.json();
-    })
-    .then((data) => {
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid family tree format");
-      }
-      setMembers(data);
-    })
-    .catch((error) => {
-      console.error("Error loading family tree:", error);
-    });
-}, []);
 
   const [selectedId, setSelectedId] = useState(null);
   const selectedMember =
