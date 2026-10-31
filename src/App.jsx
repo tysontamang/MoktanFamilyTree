@@ -30,7 +30,7 @@ export default function FamilyTreeApp() {
   const [members, setMembers] = useState(initialMembers);
 
 useEffect(() => {
-  fetch(`${import.meta.env.BASE_URL}tree/family_tree.json`)
+  fetch(`${import.meta.env.BASE_URL}tree/family_tree.json`,{cache: "no-store",})
     .then((response) => {
       if (!response.ok) {
         throw new Error("Failed to load family tree");
