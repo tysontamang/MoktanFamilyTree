@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Match all dark variants to the app toggle, independently of OS theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+input:not([type="file"]), textarea, select {
+  border: 1px solid #64748b;
+}
+.dark input:not([type="file"]), .dark textarea, .dark select {
+  border-color: #94a3b8;
+}
+input::placeholder, textarea::placeholder {
+  color: #4b5563;
+  opacity: 1;
+}
+.dark input::placeholder, .dark textarea::placeholder {
+  color: #d1d5db;
+}
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 3px;
+}
+.dark button:focus-visible, .dark input:focus-visible,
+.dark textarea:focus-visible, .dark select:focus-visible {
+  outline-color: #93c5fd;
+}
