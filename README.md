@@ -33,4 +33,10 @@ The production build is generated in `dist/`.
 
 Records are stored in this browser's local storage, not in GitHub or a shared database. Use **Backup Tree** to save your records and **Load Tree** to restore them or transfer them to another browser. A different website address or browser has separate storage.
 
-Uploading this repository to GitHub stores the application source; it does not publish a live website.
+## Website deployment
+
+Pushes to `main` run tests, build the app, and deploy `dist/` to GitHub Pages through `.github/workflows/deploy.yml`. In repository Settings → Pages, the source must be **GitHub Actions**.
+
+Website: https://tysontamang.github.io/MoktanFamilyTree/
+
+The Vite base path is `/MoktanFamilyTree/`. Update it if the repository name or hosting path changes.
