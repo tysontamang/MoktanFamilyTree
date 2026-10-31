@@ -27,14 +27,26 @@ const initialMembers = [
 
 export default function FamilyTreeApp() {
   // BYPASS CORRUPTED MEMORY BY USING A NEW STORAGE KEY: 'family_tree_v2'
-  const [members, setMembers] = useState(() => {
-    try {
-      const saved = localStorage.getItem('family_tree_v2');
-      return layoutTree(saved ? JSON.parse(saved) : initialMembers);
-    } catch (e) {
-      return initialMembers;
-    }
-  });
+  const [members, setMembers] = useState(initialMembers);
+
+useEffect(() => {
+  fetch(`${import.meta.env.BASE_URL}tree/family_tree.json`)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to load family tree");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid family tree format");
+      }
+      setMembers(data);
+    })
+    .catch((error) => {
+      console.error("Error loading family tree:", error);
+    });
+}, []);
 
   const [selectedId, setSelectedId] = useState(null);
   const selectedMember =
@@ -79,9 +91,7 @@ export default function FamilyTreeApp() {
 
   const searchMatches = findMatches(searchQuery);
 
-  useEffect(() => {
-    localStorage.setItem('family_tree_v2', JSON.stringify(members));
-  }, [members]);
+  
 
   const handleWheel = (e) => {
     if (e.ctrlKey || e.metaKey) {
